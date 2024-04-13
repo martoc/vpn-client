@@ -1,0 +1,4 @@
+easy-rsa/
+workdir/
+conf/
+.DS_Store

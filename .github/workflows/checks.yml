@@ -1,0 +1,12 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  infrastructure:
+    permissions:
+      contents: write
+    uses: martoc/workflow-infrastructure/.github/workflows/infrastructure.yml@v0

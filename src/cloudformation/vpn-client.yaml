@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: VPN Clients
+
+Parameters:
+  Name:
+    Description: Name of the VPN Client
+    Type: String
+    Default: vpn-client
+
+  Application:
+    Description: Comma separated list of applications composing this CostCenter. Applied as tag to resources
+    Type: String
+    Default: networking
+
+  CostCenter:
+    Description: CostCenter name. Applied as tag to resources
+    Type: String
+    Default: default
+
+  BusinessUnit:
+    Description: Business Unit name. Applied as tag to resources
+    Type: String
+    Default: default
+
+  VpcId:
+    Description: The ID of the VPC.
+    Type: String
+    Default: ""
+
+  VpcCidrBlock:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: 10.0.0.0/20
+
+  SubnetId:
+    Description: The ID of the subnet.
+    Type: String
+    Default: ""
+
+  ClientCidrBlock:
+    Description: The CIDR block for the client VPN.
+    Type: String
+    Default: 172.16.0.0/12
+
+  ServerCertificateArn:
+    Description: ARN of the certificate to use for the VPN endpoint.
+    Type: String
+
+  SplitTunnel:
+    Description: Enable split tunneling
+    Type: String
+    Default: false
+
+Conditions:
+  ProvidedVpc: !And
+    - !Not
+      - !Equals
+        - !Ref VpcId
+        - ""
+    - !Not
+      - !Equals
+        - !Ref SubnetId
+        - ""
+
+Resources:
+  ClientVpnSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Client VPN
+      VpcId: !If
+        - ProvidedVpc
+        - !Ref VpcId
+        - !ImportValue vpn-vpc-vpc-id
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: corp:Environment
+          Value: all
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: Name
+          Value: !Ref Name
+
+  ClientVpnEndpoint:
+    Type: AWS::EC2::ClientVpnEndpoint
+    Properties:
+      AuthenticationOptions:
+        - Type: certificate-authentication
+          MutualAuthentication:
+            ClientRootCertificateChainArn: !Ref ServerCertificateArn
+      ClientCidrBlock: !Ref ClientCidrBlock
+      ConnectionLogOptions:
+        Enabled: false
+      ServerCertificateArn: !Ref ServerCertificateArn
+      SplitTunnel: !Ref SplitTunnel
+      SecurityGroupIds:
+        - !Ref ClientVpnSecurityGroup
+      VpcId: !If
+        - ProvidedVpc
+        - !Ref VpcId
+        - !ImportValue vpn-vpc-vpc-id
+      TransportProtocol: udp
+      TagSpecifications:
+        - ResourceType: client-vpn-endpoint
+          Tags:
+            - Key: corp:Environment
+              Value: all
+            - Key: corp:Application
+              Value: !Ref Application
+            - Key: corp:BusinessUnit
+              Value: !Ref BusinessUnit
+            - Key: corp:CostCenter
+              Value: !Ref CostCenter
+            - Key: Name
+              Value: !Ref Name
+
+  ClientVpnEndpointAssociation:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      SubnetId: !If
+        - ProvidedVpc
+        - !Ref SubnetId
+        - !ImportValue vpn-vpc-subnet-id
+
+  ClientVpnRouteInternet:
+    Type: AWS::EC2::ClientVpnRoute
+    DependsOn:
+      - ClientVpnEndpointAssociation
+    Properties:
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      Description: Internet access
+      DestinationCidrBlock: 0.0.0.0/0
+      TargetVpcSubnetId: !If
+        - ProvidedVpc
+        - !Ref SubnetId
+        - !ImportValue vpn-vpc-subnet-id
+
+  ClientVpnAuthorizationRuleInternet:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Properties:
+      AuthorizeAllGroups: true
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      Description: Internet access
+      TargetNetworkCidr: 0.0.0.0/0
+
+  ClientVpnAuthorizationRuleVpc:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Properties:
+      AuthorizeAllGroups: true
+      ClientVpnEndpointId: !Ref ClientVpnEndpoint
+      Description: Local access
+      TargetNetworkCidr: !Ref VpcCidrBlock
+
+Outputs:
+  ClientVpnEndpointId:
+    Description: The ID of the VPN endpoint.
+    Value: !Ref ClientVpnEndpoint
+
+  ClientVpnSecurityGroupId:
+    Description: The ID of the VPN Security Group.
+    Value: !Ref ClientVpnSecurityGroup

@@ -1,0 +1,505 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Internet access for VPN clients.
+
+Parameters:
+  CostCenter:
+    Description: CostCenter name. Applied as tag to resources
+    Type: String
+    Default: default
+
+  BusinessUnit:
+    Description: Business Unit name. Applied as tag to resources
+    Type: String
+    Default: default
+
+  Environment:
+    Description: Environment given to the cloudformation stack and resources created by this template. Applied as a tag to resources
+    Type: String
+    Default: all
+
+  Application:
+    Description: Comma separated list of applications composing this CostCenter. Applied as tag to resources
+    Type: String
+    Default: vpc-client
+
+  Version:
+    Description: Version/Revision of the Cloudformation stack and resources created by this template. Applied as tag to resources
+    Type: String
+    Default: ""
+
+  VPCName:
+    Description: Name (tag) of the VPC
+    Type: String
+    Default: vpn-vpc
+    AllowedPattern: '[a-zA-Z0-9-]*'
+    ConstraintDescription: must be a valid string.
+    MaxLength: "40"
+    MinLength: "3"
+
+  VPCCidr:
+    Description: IP CIDR range for the VPC
+    Type: String
+    Default: 10.0.0.0/20
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a IP CIDR range in the form of a.b.c.d/z
+    MaxLength: "18"
+    MinLength: "9"
+
+  PublicSubnetCidr:
+    Description: 'Public subnet #1 IP CIDR (a.b.c.d/z)'
+    Type: String
+    Default: 10.0.0.0/20
+    AllowedPattern: ((\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2}))?
+    ConstraintDescription: Must be a IP CIDR range in the form of a.b.c.d/z (optional)
+    MaxLength: "18"
+
+  DomainName:
+    Description: Domain for the VPC
+    Type: String
+    Default: ec2.internal
+    ConstraintDescription: must be a valid string.
+    MaxLength: "140"
+    MinLength: "6"
+
+  DNSProviderIP:
+    Description: Custom DNS for the VPC, DNS IP Addresses must be comma separated, default value uses AmazonProvidedDNS.
+    Type: String
+    Default: ""
+
+  UseAwsDns:
+    Description: Use AWS Internal DNS names?  (Default is to use  DNS Names)
+    Type: String
+    AllowedValues:
+      - "True"
+      - "False"
+    Default: "True"
+    ConstraintDescription: True or False
+    MaxLength: "5"
+    MinLength: "4"
+
+Conditions:
+  UseCustomDNSProvider: !Not
+    - !Equals
+      - !Ref DNSProviderIP
+      - ""
+
+  UseAwsDns: !Equals
+    - !Ref UseAwsDns
+    - "True"
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidr
+      InstanceTenancy: default
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: !If
+        - UseAwsDns
+        - "true"
+        - "false"
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select
+        - "0"
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - public-subnet
+              - !Select
+                - 0
+                - !GetAZs
+                  Ref: AWS::Region
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: Network
+          Value: Public
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - igw
+              - !Ref AWS::Region
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+        - Key: VPC
+          Value: !Ref VPCName
+
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  DHCPOptionsSet:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - dhcp
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+      DomainName: !Ref DomainName
+      DomainNameServers: !If
+        - UseCustomDNSProvider
+        - !Split
+          - ','
+          - !Ref DNSProviderIP
+        - - AmazonProvidedDNS
+
+  DHCPOptionsAssociate:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId: !Ref DHCPOptionsSet
+
+  PublicNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - public-network-acl
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: Network
+          Value: Public
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - public-rtb
+              - !Ref AWS::Region
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: Network
+          Value: Public
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+
+  PublicNetworkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public Network Security Group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - !Ref VPCName
+              - public-network-sg
+        - Key: VPC
+          Value: !Ref VPCName
+        - Key: Network
+          Value: Public
+        - Key: corp:BusinessUnit
+          Value: !Ref BusinessUnit
+        - Key: corp:CostCenter
+          Value: !Ref CostCenter
+        - Key: corp:Application
+          Value: !Ref Application
+        - Key: corp:Environment
+          Value: !Ref Environment
+        - Key: Version
+          Value: !Ref Version
+      SecurityGroupIngress:
+        - IpProtocol: udp
+          FromPort: "1024"
+          ToPort: "65535"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "1024"
+          ToPort: "65535"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: "-1"
+          ToPort: "-1"
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: icmp
+          FromPort: "-1"
+          ToPort: "-1"
+          CidrIp: 172.16.0.0/12
+        - IpProtocol: icmp
+          FromPort: "-1"
+          ToPort: "-1"
+          CidrIp: 192.168.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  PublicAclEgress100:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: "100"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress200:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Deny access to SSH(22) from everywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: deny
+      RuleNumber: "200"
+      PortRange:
+        From: "22"
+        To: "22"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress210:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Deny access to RDP(3389) from everywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: deny
+      RuleNumber: "210"
+      PortRange:
+        From: "3389"
+        To: "3389"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress220:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow all ports from RFC 1918 Public Network 10.0.0.0/8
+    Properties:
+      CidrBlock: 10.0.0.0/8
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: "220"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress230:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow all ports from RFC 1918 Public Network 172.16.0.0/12
+    Properties:
+      CidrBlock: 172.16.0.0/12
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: "230"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress240:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow all ports from RFC 1918 Public Network 192.168.0.0/16
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: "240"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress260:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow HTTP ports from anywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: "260"
+      PortRange:
+        From: "80"
+        To: "80"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress270:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow HTTPS ports from anywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: "270"
+      PortRange:
+        From: "443"
+        To: "443"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress280:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow TCP ports for NAT usage
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: "280"
+      PortRange:
+        From: "1024"
+        To: "65535"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress290:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow UDP ports for NAT usage
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 17
+      RuleAction: allow
+      RuleNumber: "290"
+      PortRange:
+        From: "1024"
+        To: "65535"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress300:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow TCP port DNS(53) from anywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: "300"
+      PortRange:
+        From: "53"
+        To: "53"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicAclIngress310:
+    Type: AWS::EC2::NetworkAclEntry
+    Metadata:
+      Description: Allow UDP port DNS(53) from anywhere
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: 17
+      RuleAction: allow
+      RuleNumber: "310"
+      PortRange:
+        From: "53"
+        To: "53"
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  AssociateAclPublicSubnet:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref PublicNetworkAcl
+      SubnetId: !Ref PublicSubnet
+
+  AddIGWPublicRouteTable:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref InternetGateway
+
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${AWS::StackName}-vpc-id
+
+  SubnetId:
+    Description: Public Subnet ID
+    Value: !Ref PublicSubnet
+    Export:
+      Name: !Sub ${AWS::StackName}-subnet-id
