@@ -34,7 +34,7 @@ aws cloudformation create-stack --stack-name vpn-client --template-body file://s
 ## Configure AWS VPN Client
 
 * Download the configuration file from the AWS Console
-* Update the configuration file with the client certificate and client key adding this section to the configuration file below the `<ca></ca>` section
+* Update the configuration file with the client certificate `workdir/client.crt` and client key `workdir/client.key` adding this section to the configuration file below the `<ca></ca>` section
 ```
 <cert>
 -----BEGIN CERTIFICATE-----
