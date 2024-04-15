@@ -2,6 +2,8 @@
 
 You need a VPC in AWS and a VPN client to connect to the VPC. This document describes how to create a VPC and VPN client configuration in AWS.
 
+![Deployment Diagram](images/client-vpn-scenario-igw.png)
+
 ## Create VPC (Optional)
 
 An existing VPC could be used to create the VPN client. If you don't have a VPC, you can create one using the following command:
