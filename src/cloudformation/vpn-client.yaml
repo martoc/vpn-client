@@ -73,14 +73,12 @@ Resources:
         - !Ref VpcId
         - !ImportValue vpn-vpc-vpc-id
       SecurityGroupIngress:
-        - IpProtocol: -1
+        - IpProtocol: udp
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
-        - IpProtocol: -1
-          FromPort: 0
-          ToPort: 65535
+        - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: corp:Environment
