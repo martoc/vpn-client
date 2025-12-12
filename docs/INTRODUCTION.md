@@ -1,16 +1,21 @@
 # Getting Started
 
-This guide walks you through setting up an AWS Client VPN endpoint to securely connect to your AWS VPC from anywhere.
+This guide walks you through setting up an AWS Client VPN endpoint to
+securely connect to your AWS VPC from anywhere.
 
 ## Overview
 
-AWS Client VPN is a managed client-based VPN service that enables secure access to AWS resources and on-premises networks. This project automates the deployment using CloudFormation templates and provides scripts for certificate generation.
+AWS Client VPN is a managed client-based VPN service that enables secure
+access to AWS resources and on-premises networks. This project automates
+the deployment using CloudFormation templates and provides scripts for
+certificate generation.
 
 ## Prerequisites
 
 Before you begin, ensure you have:
 
-- **AWS CLI**: Installed and configured with credentials that have permissions to:
+- **AWS CLI**: Installed and configured with credentials that have
+  permissions to:
   - Create and manage CloudFormation stacks
   - Create VPCs, subnets, and security groups
   - Import certificates to AWS Certificate Manager (ACM)
@@ -20,11 +25,13 @@ Before you begin, ensure you have:
 
 ## Step 1: Create a VPC (Optional)
 
-You can use an existing VPC or create a new one using the provided CloudFormation template.
+You can use an existing VPC or create a new one using the provided
+CloudFormation template.
 
 ### Option A: Use the Provided VPC Template
 
 The `vpn-vpc.yaml` template creates a VPC with secure defaults including:
+
 - A public subnet with Internet Gateway
 - Network ACLs that block SSH/RDP access
 - DNS support enabled
@@ -38,12 +45,12 @@ aws cloudformation create-stack \
 
 **Available Parameters:**
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| VPCName | vpn-vpc | Name tag for the VPC |
-| VPCCidr | 10.0.0.0/20 | CIDR block for the VPC |
+| Parameter        | Default     | Description                      |
+| ---------------- | ----------- | -------------------------------- |
+| VPCName          | vpn-vpc     | Name tag for the VPC             |
+| VPCCidr          | 10.0.0.0/20 | CIDR block for the VPC           |
 | PublicSubnetCidr | 10.0.0.0/24 | CIDR block for the public subnet |
-| UseAwsDns | true | Use AWS-provided DNS |
+| UseAwsDns        | true        | Use AWS-provided DNS             |
 
 Wait for the stack to complete:
 
@@ -56,13 +63,15 @@ aws cloudformation wait stack-create-complete \
 ### Option B: Use an Existing VPC
 
 If you have an existing VPC, note down the following values:
+
 - **VPC ID**: e.g., `vpc-0123456789abcdef0`
 - **Subnet ID**: e.g., `subnet-0123456789abcdef0`
 - **VPC CIDR Block**: e.g., `10.0.0.0/16`
 
 ## Step 2: Generate Certificates for Mutual TLS
 
-AWS Client VPN uses mutual TLS authentication, requiring both server and client certificates.
+AWS Client VPN uses mutual TLS authentication, requiring both server and
+client certificates.
 
 ### Clone easy-rsa
 
@@ -80,15 +89,17 @@ src/scripts/generate.sh
 
 This creates the following files in the `workdir/` directory:
 
-| File | Purpose |
-|------|---------|
-| `ca.crt` | Certificate Authority certificate |
-| `server.crt` | Server certificate |
-| `server.key` | Server private key |
-| `client.crt` | Client certificate |
-| `client.key` | Client private key |
+| File         | Purpose                      |
+| ------------ | ---------------------------- |
+| `ca.crt`     | Certificate Authority cert   |
+| `server.crt` | Server certificate           |
+| `server.key` | Server private key           |
+| `client.crt` | Client certificate           |
+| `client.key` | Client private key           |
 
-> **Security Note**: The generated certificates use the `nopass` option for convenience. In production environments, consider using password-protected keys and a proper PKI infrastructure.
+> **Security Note**: The generated certificates use the `nopass` option
+> for convenience. In production environments, consider using
+> password-protected keys and a proper PKI infrastructure.
 
 ## Step 3: Import Server Certificate to AWS ACM
 
@@ -103,8 +114,9 @@ aws acm import-certificate \
 ```
 
 **Save the certificate ARN** from the output. It will look like:
-```
-arn:aws:acm:us-east-2:123456789012:certificate/12345678-1234-1234-1234-123456789012
+
+```text
+arn:aws:acm:us-east-2:123456789012:certificate/12345678-1234-1234-...
 ```
 
 You can also retrieve it later:
@@ -117,7 +129,8 @@ aws acm list-certificates --region <your-region>
 
 ### Using the VPC Created in Step 1
 
-If you used the `vpn-vpc.yaml` template, the VPN client stack will automatically import the VPC and subnet IDs:
+If you used the `vpn-vpc.yaml` template, the VPN client stack will
+automatically import the VPC and subnet IDs:
 
 ```bash
 aws cloudformation create-stack \
@@ -146,14 +159,14 @@ aws cloudformation create-stack \
 
 ### Available Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| ServerCertificateArn | (required) | ARN of the server certificate in ACM |
-| VpcId | (imported) | VPC ID (if not using vpn-vpc stack) |
-| SubnetId | (imported) | Subnet ID for VPN association |
-| VpcCidrBlock | 10.0.0.0/20 | CIDR block of the VPC |
-| ClientCidrBlock | 172.16.0.0/12 | CIDR range for VPN clients |
-| SplitTunnel | false | Enable split tunneling |
+| Parameter            | Default      | Description                      |
+| -------------------- | ------------ | -------------------------------- |
+| ServerCertificateArn | (required)   | ARN of the server cert in ACM    |
+| VpcId                | (imported)   | VPC ID (if not using vpn-vpc)    |
+| SubnetId             | (imported)   | Subnet ID for VPN association    |
+| VpcCidrBlock         | 10.0.0.0/20  | CIDR block of the VPC            |
+| ClientCidrBlock      | 172.16.0.0/12| CIDR range for VPN clients       |
+| SplitTunnel          | false        | Enable split tunneling           |
 
 Wait for the stack to complete:
 
@@ -175,9 +188,10 @@ aws cloudformation wait stack-create-complete \
 
 ### Add Client Certificate and Key
 
-Edit the downloaded `.ovpn` file and add your client certificate and key below the `</ca>` section:
+Edit the downloaded `.ovpn` file and add your client certificate and key
+below the `</ca>` section:
 
-```
+```text
 <cert>
 -----BEGIN CERTIFICATE-----
 [Contents of workdir/client.crt]
@@ -206,7 +220,7 @@ echo "</key>" >> client-config.ovpn
 
 ### Connect Using AWS VPN Client
 
-1. Download and install the [AWS VPN Client](https://aws.amazon.com/vpn/client-vpn-download/)
+1. Download and install the [AWS VPN Client][aws-vpn-download]
 2. Open AWS VPN Client
 3. Go to **File** > **Manage Profiles**
 4. Click **Add Profile**
@@ -217,7 +231,7 @@ echo "</key>" >> client-config.ovpn
 
 To connect from an iOS device:
 
-1. Download [OpenVPN Connect](https://apps.apple.com/us/app/openvpn-connect-openvpn-app/id590379981) from the App Store
+1. Download [OpenVPN Connect][openvpn-ios] from the App Store
 2. Transfer the configured `.ovpn` file to your device:
    - Use AirDrop
    - Email it to yourself
@@ -243,4 +257,8 @@ ping <private-ip-of-ec2-instance>
 
 - [Architecture Guide](./ARCHITECTURE.md) - Understand the system design
 - [Troubleshooting](./TROUBLESHOOTING.md) - Common issues and solutions
-- [AWS Client VPN Documentation](https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/) - Official AWS documentation
+- [AWS Client VPN Documentation][aws-vpn-docs] - Official AWS documentation
+
+[aws-vpn-download]: https://aws.amazon.com/vpn/client-vpn-download/
+[openvpn-ios]: https://apps.apple.com/us/app/openvpn-connect-openvpn-app/id590379981
+[aws-vpn-docs]: https://docs.aws.amazon.com/vpn/latest/clientvpn-admin/
